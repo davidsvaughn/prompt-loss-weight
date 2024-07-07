@@ -1,5 +1,5 @@
 # Experiments with prompt-loss-weight
-code for Medium article on prompt-loss-weight
+code to accompany Medium article on prompt-loss-weight
 
 ## Setup (with virtualenv)
 ```
