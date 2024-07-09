@@ -64,7 +64,7 @@ training_args = TrainingArguments(
     per_device_eval_batch_size      = 16,       # batch size for evaluation
     gradient_accumulation_steps     = 1,        # number of steps before performing a backward/update pass
     gradient_checkpointing          = True,     # use gradient checkpointing to save memory
-    remove_unused_columns           = True,     # remove unused columns from dataset
+    remove_unused_columns           = False,    # remove unused columns from dataset
     logging_strategy                = "steps", 
     evaluation_strategy             = "steps",
     output_dir                      = "output", # directory to save model checkpoints
@@ -102,7 +102,7 @@ class ScriptArguments:
     use_packing:        Optional[bool]  = field(default=True)   # use sequence packing
     use_4bit:           Optional[bool]  = field(default=False)  # use 4-bit quantization
     use_double_quant:   Optional[bool]  = field(default=True)   # use double quantization
-    prompt_loss_weight: Optional[float] = field(default=1.0)    # [0..1] (1.0 = standard CausalLM loss)
+    prompt_loss_weight: Optional[float] = field(default=-1)    # [-1,0..1] (-1 = standard CausalLM loss)
 
 # instantiate script arguments ( we could make these defaults also... whatever ¯\_(シ)_/¯  )
 script_args = ScriptArguments(
@@ -113,7 +113,7 @@ script_args = ScriptArguments(
                       f"\nContext:{{article}}\nQuestion:{{question}}\nOptions:{{options}}",
     completion_template = f"{{answer}}",
 
-    prompt_loss_weight=0.0,
+    # prompt_loss_weight=0.0,
 )
 
 
@@ -466,7 +466,6 @@ def prepare_compute_metrics_func(llm_dataset):
         }
     return compute_metrics
 
-# https://discuss.huggingface.co/t/cuda-out-of-memory-when-using-trainer-with-compute-metrics/2941/13
 def preprocess_logits_for_metrics(logits, labels):
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = labels[..., 1:].contiguous()
@@ -487,32 +486,12 @@ def preprocess_logits_for_metrics(logits, labels):
 
 from transformers import Trainer
 
-trainer = Trainer(
-    model=model, 
-    args=training_args, 
-    train_dataset=llm_dataset['train'],
-    eval_dataset=llm_dataset['validation'],
-    compute_metrics=prepare_compute_metrics_func(llm_dataset),
-    preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-)
-
-# Start training
-trainer.train()
-
-
-###############################################################################
-
-# make custom fields (like 'completion_mask') available inside compute_loss function
-training_args.remove_unused_columns = False
-
 class PLWTrainer(Trainer):
 
     def __init__(self, *args, prompt_loss_weight=1.0, **kwargs):
         super().__init__(*args, **kwargs)
         self.prompt_loss_weight = prompt_loss_weight
 
-    # see: https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L1116
-    # also: https://huggingface.co/learn/nlp-course/chapter7/6?fw=pt#training-with-accelerate
     def compute_loss(self, model, inputs, return_outputs=False):
 
         # get outputs WITHOUT computing loss (by not passing in labels)
@@ -540,14 +519,25 @@ class PLWTrainer(Trainer):
         loss = losses @ shift_mask.view(-1) / shift_mask.sum()
         return (loss, outputs) if return_outputs else loss
     
-    
-trainer = PLWTrainer(
-    prompt_loss_weight=script_args.prompt_loss_weight,
-    model=model, 
-    args=training_args, 
-    train_dataset=llm_dataset['train'],
-    eval_dataset=llm_dataset['validation'],
-    compute_metrics=prepare_compute_metrics_func(llm_dataset),
-    preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-)
+if script_args.prompt_loss_weight < 0:
+    trainer = Trainer(
+        model=model, 
+        args=training_args, 
+        train_dataset=llm_dataset['train'],
+        eval_dataset=llm_dataset['validation'],
+        compute_metrics=prepare_compute_metrics_func(llm_dataset),
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+    )
+else:
+    trainer = PLWTrainer(
+        prompt_loss_weight=script_args.prompt_loss_weight,
+        model=model, 
+        args=training_args, 
+        train_dataset=llm_dataset['train'],
+        eval_dataset=llm_dataset['validation'],
+        compute_metrics=prepare_compute_metrics_func(llm_dataset),
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+    )
+
+# Start training
 trainer.train()
