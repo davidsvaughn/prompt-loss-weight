@@ -8,6 +8,9 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Running
-- single-GPU: `python main.py`
-- multi-GPU: `torchrun --nproc_per_node 4 main.py`
+## Fine-Tuning with Prompt-Loss-Weight
+- single-GPU: `python run_plw.py [--prompt_loss_weight <float>] [other_args...]`
+- multi-GPU:  `torchrun --nproc_per_node [num_gpus] run_plw.py [--prompt_loss_weight <float>] [other_args...]`
+
+## Compute Generation Ratios
+- `python gen_ratios.py [args...]`
