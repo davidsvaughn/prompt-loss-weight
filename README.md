@@ -1,5 +1,5 @@
 # Experiments with prompt-loss-weight
-code to accompany [Medium article on prompt-loss-weight](https://medium.com/p/016f85fd67f4)
+code to accompany [Towards Data Science article on prompt-loss-weight](https://towardsdatascience.com/to-mask-or-not-to-mask-the-effect-of-prompt-tokens-on-instruction-tuning-016f85fd67f4)
 
 ## Setup (with virtualenv)
 ```
